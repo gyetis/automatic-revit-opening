@@ -72,7 +72,6 @@ class WindowPlacement:
 		opening.get_Parameter(BuiltInParameter.INSTANCE_SILL_HEIGHT_PARAM).Set(sillHeight)
 		return opening
 		
-# Work with boolean toogle
 def main():
 	# Start transaction with the current Revit document
 	doc = DocumentManager.Instance.CurrentDBDocument
