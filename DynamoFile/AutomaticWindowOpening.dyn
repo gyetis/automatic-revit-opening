@@ -1,0 +1,85 @@
+{
+  "Uuid": "0d565894-3cf8-486e-9764-df5014aea785",
+  "IsCustomNode": false,
+  "Description": null,
+  "Name": "GizemYetis_AutomaticWindowOpening",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "NodeType": "PythonScriptNode",
+      "Code": "import clr\r\n\r\nclr.AddReference(\"RevitNodes\")\r\nimport Revit\r\nclr.ImportExtensions(Revit.Elements)\r\nclr.ImportExtensions(Revit.GeometryConversion)\r\n\r\nclr.AddReference(\"RevitServices\")\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\nclr.AddReference(\"RevitAPI\")\r\nfrom Autodesk.Revit.DB import *\r\n\r\nfrom System.Collections.Generic import *\r\n\r\nclass WindowPlacement:\r\n\tdef __init__(self, doc, wall, furniture, window):\r\n\t\tself.doc = doc\r\n\t\tself.wall = wall\r\n\t\tself.furniture = furniture\r\n\t\tself.window = window\r\n\t\r\n\t# Define exterior and interior walls\r\n\tdef elType(self):\r\n\t\textWall = []\r\n\t\tintWall = []\r\n\t\tfor e in self.wall:\r\n\t\t\tif e.WallType.Function == WallFunction.Exterior:\r\n\t\t\t\textWall.append(e)\r\n\t\t\telif e.WallType.Function == WallFunction.Interior:\r\n\t\t\t\tintWall.append(e)\r\n\t\t\telse:\r\n\t\t\t\tintWall == self.intWall\r\n\t\t\t\textWall == self.extWall\r\n\t\treturn extWall, intWall\r\n\t\r\n\t# Get wall curves and furniture location point to find closest wall to furniture\r\n\tdef elLoc(self, walls):\r\n\t\twallCrvs = []\r\n\t\tfurniturePt = []\r\n\t\tfor w in walls:\r\n\t\t\twallCrvs.append(w.Location.Curve)\r\n\t\tfor f in self.furniture:\t\t\r\n\t\t\tfurniturePt = f.Location.Point\r\n\t\treturn wallCrvs, furniturePt\r\n\t\r\n\t# Find closest wall index to extract closest wall and closest wall curve\r\n\tdef closest(self, wallCrvs, furniturePt):\r\n\t\tdistances = [curve.Distance(furniturePt) for curve in wallCrvs]\r\n\t\tclosestInd = distances.index(min(distances))\r\n\t\treturn closestInd\r\n\t\r\n\t# Define window specs with reference to closest wall and middle point of the furniture\t\r\n\tdef openSpec(self, closestWallCrv, furniturePt):\r\n\t\tfurnitureBBoxMax = self.furniture[0].BoundingBox[self.doc.ActiveView].Max\r\n\t\tfurnitureBBoxMin = self.furniture[0].BoundingBox[self.doc.ActiveView].Min\t\t\r\n\t\tsillHeight = furnitureBBoxMax[2]\r\n\t\tfurnitureMidLoc = furniturePt - ((furnitureBBoxMax - furnitureBBoxMin) / 2)\r\n\t\tfurnitureMidLoc = closestWallCrv.Project(furnitureMidLoc).XYZPoint\r\n\t\treturn sillHeight, furnitureMidLoc\r\n\t\r\n\t# Place window on the closest wall right on the middle and highest location point of the furniture. \r\n\tdef createOpening(self, closestWall, windowLoc, sillHeight):\r\n\t\tif self.window.IsActive == False:\r\n\t\t\tself.window.Activate()\r\n\t\t\tself.doc.Regenerate()\r\n\t\topening = self.doc.Create.NewFamilyInstance(windowLoc, self.window, closestWall,  Structure.StructuralType.NonStructural)\r\n\t\topening.get_Parameter(BuiltInParameter.INSTANCE_SILL_HEIGHT_PARAM).Set(sillHeight)\r\n\t\treturn opening\r\n\t\t\r\n# Work with boolean toogle\r\ndef main():\r\n\t# Start transaction with the current Revit document\r\n\tdoc = DocumentManager.Instance.CurrentDBDocument\r\n\tTransactionManager.Instance.EnsureInTransaction(doc)\r\n\t\t\r\n\t# Define Revit element categories\r\n\twallCategory = BuiltInCategory.OST_Walls\r\n\tfurnitureCategory = BuiltInCategory.OST_Furniture\r\n\twindowCategory = BuiltInCategory.OST_Windows\r\n\t\t\r\n\t# Extract Revit elements and window type to placed\r\n\twalls = FilteredElementCollector(doc).OfCategory(wallCategory).WhereElementIsNotElementType().ToElements()\r\n\tfurniture = FilteredElementCollector(doc).OfCategory(furnitureCategory).WhereElementIsNotElementType().ToElements()\r\n\twindow = FilteredElementCollector(doc).OfClass(FamilySymbol).OfCategory(windowCategory).ToElements()[0]\r\n\t\t\r\n\t# Extract walls and specs\r\n\tplacement = WindowPlacement(doc, walls, furniture, window)\r\n\textWalls, intWalls = placement.elType()\r\n\textWallCurves, furniturePt = placement.elLoc(extWalls)\r\n\t\r\n\t# Extract closest wall and specs with reference to the furniture\r\n\tclosestWallIndex = placement.closest(extWallCurves, furniturePt)\r\n\tclosestWallCurve = extWallCurves[closestWallIndex]\r\n\tclosestWall = extWalls[closestWallIndex]\r\n\t\r\n\t# Define window specs to be placed on the closest wall with reference to the furniture's middle point\r\n\tsillHeight, furnitureLoc = placement.openSpec(closestWallCurve, furniturePt)\r\n\r\n\t# Create opening on the wall\r\n\tplacement.createOpening(closestWall, furnitureLoc, sillHeight)\r\n\r\n\t# End transaction\t\r\n\tTransactionManager.Instance.TransactionTaskDone()\r\n\r\nmain()",
+      "VariableInputPorts": true,
+      "Id": "7f761a74f6754c859d2ad558cd51b4e9",
+      "Inputs": [
+        {
+          "Id": "a033baef486e4904b9838c91da83df55",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "63335709853740d0929d3f9763edb633",
+          "Name": "OUT",
+          "Description": "Result of the python script",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Runs an embedded IronPython script."
+    }
+  ],
+  "Connectors": [],
+  "Dependencies": [],
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": true,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "2.0.3.8810",
+      "RunType": "Automatic",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "Background Preview",
+      "EyeX": -17.0,
+      "EyeY": 24.0,
+      "EyeZ": 50.0,
+      "LookX": 12.0,
+      "LookY": -13.0,
+      "LookZ": -58.0,
+      "UpX": 0.0,
+      "UpY": 1.0,
+      "UpZ": 0.0
+    },
+    "NodeViews": [
+      {
+        "ShowGeometry": true,
+        "Name": "WindowPlacement",
+        "Id": "7f761a74f6754c859d2ad558cd51b4e9",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "X": 188.76591551582032,
+        "Y": 220.47526849457716
+      }
+    ],
+    "Annotations": [],
+    "X": 90.098190000000045,
+    "Y": 71.424990000000008,
+    "Zoom": 0.70823125000000009
+  }
+}
