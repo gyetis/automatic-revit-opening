@@ -1,3 +1,6 @@
+__author__ = "Gizem Yetis"
+__mail__ = "gizemyetis93@gmail.com"
+
 import clr
 
 clr.AddReference("RevitNodes")
